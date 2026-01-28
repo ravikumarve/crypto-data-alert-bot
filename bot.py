@@ -3,8 +3,10 @@ import sqlite3
 import requests
 import asyncio
 from aiogram import Bot, Dispatcher, executor, types
+from aiohttp import web
 from contextlib import contextmanager
 import os
+from threading import Thread
 
 API_TOKEN = os.getenv("BOT_TOKEN", "8508060217:AAH87XK6qzB8NNmfdm3DBiCCEQRv1QxxkP0")
 RAZORPAY_LINK = "YOUR_PAYMENT_LINK"
@@ -117,7 +119,17 @@ async def send_alerts():
 async def alert_loop():
     while True:
         await send_alerts()
-        await asyncio.sleep(3600)  # Check every hour
+        await asyncio.sleep(3600)
+
+# Keep-alive web server
+def run_web():
+    app = web.Application()
+    
+    async def health(request):
+        return web.Response(text="Bot is alive!")
+    
+    app.router.add_get('/', health)
+    web.run_app(app, host='0.0.0.0', port=8080)
 
 async def on_startup(dp):
     asyncio.create_task(alert_loop())
@@ -125,4 +137,9 @@ async def on_startup(dp):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     init_db()
+    
+    # Start web server in background
+    Thread(target=run_web, daemon=True).start()
+    
+    # Start bot
     executor.start_polling(dp, on_startup=on_startup)
