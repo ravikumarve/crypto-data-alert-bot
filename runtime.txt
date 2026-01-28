@@ -1,0 +1,6 @@
+python-3.11.9
+```
+
+**4. Procfile** (Important for Koyeb):
+```
+worker: python bot.py
