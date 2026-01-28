@@ -2,18 +2,17 @@ import logging
 import sqlite3
 import requests
 import asyncio
-from aiogram import Bot, Dispatcher, executor, types
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
 from contextlib import contextmanager
 import os
 
-# Use environment variable for security
 API_TOKEN = os.getenv("BOT_TOKEN", "8508060217:AAH87XK6qzB8NNmfdm3DBiCCEQRv1QxxkP0")
 RAZORPAY_LINK = "YOUR_PAYMENT_LINK"
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
-# Database context manager for thread safety
 @contextmanager
 def get_db():
     conn = sqlite3.connect("users.db")
@@ -22,7 +21,6 @@ def get_db():
     finally:
         conn.close()
 
-# Initialize DB
 def init_db():
     with get_db() as conn:
         cur = conn.cursor()
@@ -41,35 +39,35 @@ def is_premium(user_id):
         row = cur.fetchone()
         return row and row[0] == 1
 
-@dp.message_handler(commands=["start"])
-async def start(msg: types.Message):
+@dp.message(Command("start"))
+async def start(message: types.Message):
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)", (msg.from_user.id,))
+        cur.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)", (message.from_user.id,))
         conn.commit()
     
-    await msg.answer(
+    await message.answer(
         "📊 Crypto Data Alert Bot\n\n"
         "• Funding Rate Extremes\n"
         "• Token Unlock Alerts\n\n"
-        "⚠️ Educational data only\n\n"  # ← FIXED: Added opening quote
+        "⚠️ Educational data only\n\n"
         "Commands:\n"
         "/free – sample alerts\n"
         "/premium – unlock full access"
     )
 
-@dp.message_handler(commands=["free"])
-async def free(msg: types.Message):
-    await msg.answer(
+@dp.message(Command("free"))
+async def free(message: types.Message):
+    await message.answer(
         "🚨 Sample Alert\n\n"
         "BTCUSDT Funding: +0.17%\n"
         "Bias: Longs overcrowded\n\n"
         "Upgrade for real-time alerts → /premium"
     )
 
-@dp.message_handler(commands=["premium"])
-async def premium(msg: types.Message):
-    await msg.answer(
+@dp.message(Command("premium"))
+async def premium(message: types.Message):
+    await message.answer(
         f"🔓 Premium Access\n\n"
         "✔ Real-time funding rate alerts\n"
         "✔ Token unlock alerts\n\n"
@@ -77,7 +75,6 @@ async def premium(msg: types.Message):
         "After payment send screenshot to admin."
     )
 
-# --- FUNDING RATE CHECK ---
 def funding_rate_check():
     try:
         url = "https://fapi.binance.com/fapi/v1/premiumIndex"
@@ -100,7 +97,6 @@ def funding_rate_check():
         logging.error(f"Error fetching funding rates: {e}")
         return []
 
-# --- ALERT SENDER ---
 async def send_alerts():
     alerts = funding_rate_check()
     if not alerts:
@@ -115,20 +111,20 @@ async def send_alerts():
         for alert in alerts:
             try:
                 await bot.send_message(user[0], alert)
-                await asyncio.sleep(0.05)  # Rate limiting
+                await asyncio.sleep(0.05)
             except Exception as e:
                 logging.error(f"Failed to send to {user[0]}: {e}")
 
-# Periodic alert checker
 async def alert_loop():
     while True:
         await send_alerts()
-        await asyncio.sleep(3600)  # Check every hour
+        await asyncio.sleep(3600)
 
-async def on_startup(dp):
+async def main():
+    init_db()
     asyncio.create_task(alert_loop())
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    init_db()
-    executor.start_polling(dp, on_startup=on_startup)
+    asyncio.run(main())
