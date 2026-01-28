@@ -2,8 +2,7 @@ import logging
 import sqlite3
 import requests
 import asyncio
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram import Bot, Dispatcher, executor, types
 from contextlib import contextmanager
 import os
 
@@ -11,7 +10,7 @@ API_TOKEN = os.getenv("BOT_TOKEN", "8508060217:AAH87XK6qzB8NNmfdm3DBiCCEQRv1Qxxk
 RAZORPAY_LINK = "YOUR_PAYMENT_LINK"
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(bot)
 
 @contextmanager
 def get_db():
@@ -39,14 +38,14 @@ def is_premium(user_id):
         row = cur.fetchone()
         return row and row[0] == 1
 
-@dp.message(Command("start"))
-async def start(message: types.Message):
+@dp.message_handler(commands=["start"])
+async def start(msg: types.Message):
     with get_db() as conn:
         cur = conn.cursor()
-        cur.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)", (message.from_user.id,))
+        cur.execute("INSERT OR IGNORE INTO users(user_id) VALUES(?)", (msg.from_user.id,))
         conn.commit()
     
-    await message.answer(
+    await msg.answer(
         "📊 Crypto Data Alert Bot\n\n"
         "• Funding Rate Extremes\n"
         "• Token Unlock Alerts\n\n"
@@ -56,18 +55,18 @@ async def start(message: types.Message):
         "/premium – unlock full access"
     )
 
-@dp.message(Command("free"))
-async def free(message: types.Message):
-    await message.answer(
+@dp.message_handler(commands=["free"])
+async def free(msg: types.Message):
+    await msg.answer(
         "🚨 Sample Alert\n\n"
         "BTCUSDT Funding: +0.17%\n"
         "Bias: Longs overcrowded\n\n"
         "Upgrade for real-time alerts → /premium"
     )
 
-@dp.message(Command("premium"))
-async def premium(message: types.Message):
-    await message.answer(
+@dp.message_handler(commands=["premium"])
+async def premium(msg: types.Message):
+    await msg.answer(
         f"🔓 Premium Access\n\n"
         "✔ Real-time funding rate alerts\n"
         "✔ Token unlock alerts\n\n"
@@ -118,13 +117,12 @@ async def send_alerts():
 async def alert_loop():
     while True:
         await send_alerts()
-        await asyncio.sleep(3600)
+        await asyncio.sleep(3600)  # Check every hour
 
-async def main():
-    init_db()
+async def on_startup(dp):
     asyncio.create_task(alert_loop())
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    init_db()
+    executor.start_polling(dp, on_startup=on_startup)
